@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gangas Tacuarembó — Catálogo</title>
+  <meta name="description" content="Catálogo rápido con compra por WhatsApp." />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">GT</span>
+      <h1>Gangas Tacuarembó</h1>
+    </div>
+    <a class="whats-cta" target="_blank" rel="noopener" href="https://wa.me/c/59897213277">Ver catálogo en WhatsApp</a>
+  </header>
+
+  <main class="container">
+    <section class="filters">
+      <input id="search" type="search" placeholder="Buscar productos..." />
+      <select id="category">
+        <option value="">Todas las categorías</option>
+      </select>
+      <select id="sort">
+        <option value="recent">Más nuevos</option>
+        <option value="price-asc">Precio: menor a mayor</option>
+        <option value="price-desc">Precio: mayor a menor</option>
+        <option value="name-asc">Nombre A→Z</option>
+      </select>
+    </section>
+
+    <section id="grid" class="grid" aria-live="polite"></section>
+
+    <template id="card-tpl">
+      <article class="card">
+        <div class="imgwrap">
+          <img alt="" loading="lazy" />
+          <span class="badge"></span>
+        </div>
+        <div class="content">
+          <h3 class="title"></h3>
+          <p class="price"></p>
+          <p class="desc"></p>
+          <button class="buy">Comprar por WhatsApp</button>
+        </div>
+      </article>
+    </template>
+
+    <p id="empty" class="empty" hidden>No hay productos que coincidan.</p>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="y"></span> Gangas Tacuarembó · <a target="_blank" rel="noopener" href="https://wa.me/59897213277">Contactar por WhatsApp</a></p>
+  </footer>
+
+  <script>
+    const WA_NUMBER = "59897213277"; // tu número
+    const $grid = document.getElementById("grid");
+    const $tpl = document.getElementById("card-tpl");
+    const $search = document.getElementById("search");
+    const $category = document.getElementById("category");
+    const $sort = document.getElementById("sort");
+    const $empty = document.getElementById("empty");
+    document.getElementById("y").textContent = new Date().getFullYear();
+
+    let products = [];
+    let view = [];
+
+    const money = v => new Intl.NumberFormat("es-UY", { style:"currency", currency:"UYU", maximumFractionDigits:0 }).format(v);
+
+    const buildCategories = (items) => {
+      const cats = Array.from(new Set(items.map(i => i.category).filter(Boolean))).sort();
+      cats.forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c; opt.textContent = c;
+        $category.appendChild(opt);
+      });
+    };
+
+    const applyFilters = () => {
+      const q = $search.value.trim().toLowerCase();
+      const cat = $category.value;
+      const sort = $sort.value;
+
+      view = products.filter(p => {
+        const hitQ = !q || [p.title, p.description, p.category].join(" ").toLowerCase().includes(q);
+        const hitC = !cat || p.category === cat;
+        return hitQ && hitC;
+      });
+
+      switch (sort) {
+        case "price-asc": view.sort((a,b)=>a.price-b.price); break;
+        case "price-desc": view.sort((a,b)=>b.price-a.price); break;
+        case "name-asc": view.sort((a,b)=>a.title.localeCompare(b.title)); break;
+        default: view.sort((a,b)=> (b.added || 0) - (a.added || 0));
+      }
+
+      render();
+    };
+
+    const render = () => {
+      $grid.innerHTML = "";
+      if (!view.length) { $empty.hidden = false; return; }
+      $empty.hidden = true;
+
+      const frag = document.createDocumentFragment();
+      view.forEach(p => {
+        const node = $tpl.content.cloneNode(true);
+        const img = node.querySelector("img");
+        const badge = node.querySelector(".badge");
+        node.querySelector(".title").textContent = p.title;
+        node.querySelector(".price").textContent = p.price ? money(p.price) : "Consultar";
+        node.querySelector(".desc").textContent = p.description || "";
+        img.src = p.image;
+        img.alt = p.title;
+
+        // Etiquetas dinámicas
+        if (p.badge) { badge.textContent = p.badge; badge.style.display = "inline-block"; }
+        else { badge.style.display = "none"; }
+
+        // CTA WhatsApp con mensaje prellenado
+        const msg = encodeURIComponent(`Hola! Me interesa: ${p.title}${p.sku ? " (SKU: "+p.sku+")" : ""}. ¿Sigue disponible?`);
+        const url = `https://wa.me/${WA_NUMBER}?text=${msg}`;
+        const btn = node.querySelector(".buy");
+        btn.addEventListener("click", ()=> window.open(url, "_blank"));
+
+        frag.appendChild(node);
+      });
+      $grid.appendChild(frag);
+    };
+
+    // Cargar datos
+    fetch("products.json?ts=" + Date.now())
+      .then(r => r.json())
+      .then(data => {
+        products = Array.isArray(data) ? data : data.products || [];
+        buildCategories(products);
+        applyFilters();
+      })
+      .catch(() => {
+        $empty.hidden = false;
+        $empty.textContent = "No se pudo cargar el catálogo.";
+      });
+
+    // Eventos
+    [$search, $category, $sort].forEach(el => el.addEventListener("input", applyFilters));
+  </script>
+</body>
+</html>
